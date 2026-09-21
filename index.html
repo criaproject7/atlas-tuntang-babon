@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atlas Bahaya & Survei Drone — DAS Tuntang dan Babon</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+  :root{
+    --ink:#14201c;
+    --ink-2:#4a5b55;
+    --paper:#ffffff;
+    --rule:#d4ddd9;
+    --panel-bg:rgba(255,255,255,.96);
+    --focus:#1f6f5c;
+  }
+
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    font-family:"Source Sans 3","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    color:var(--ink);
+    font-size:15px;
+    line-height:1.5;
+    overflow:hidden;
+  }
+
+  #map{position:absolute;inset:0;z-index:1;background:#e8ece9}
+
+  /* ---------- Panel kontrol layer (kanan atas) ---------- */
+  #kontrol{
+    position:absolute;top:14px;right:14px;z-index:1000;
+    width:264px;max-height:calc(100% - 28px);overflow-y:auto;
+    background:var(--panel-bg);
+    border:1px solid var(--rule);
+    border-radius:4px;
+    box-shadow:0 2px 10px rgba(20,32,28,.14);
+  }
+  #kontrol header{
+    padding:12px 14px 10px;
+    border-bottom:1px solid var(--rule);
+  }
+  #kontrol h1{
+    margin:0;font-size:15px;font-weight:650;letter-spacing:-.01em;
+  }
+  #kontrol header p{
+    margin:2px 0 0;font-size:12.5px;color:var(--ink-2);
+  }
+  .grup{padding:11px 14px;border-bottom:1px solid var(--rule)}
+  .grup:last-child{border-bottom:none}
+  .grup h2{
+    margin:0 0 7px;font-size:12.5px;font-weight:650;color:var(--ink-2);
+  }
+  .subjudul{
+    margin:8px 0 3px;font-size:11.5px;color:var(--ink-2);
+    font-weight:650;
+  }
+  .subjudul:first-child{margin-top:0}
+  .baris{
+    display:flex;align-items:center;gap:8px;
+    padding:3px 0 3px 4px;font-size:13.5px;cursor:pointer;
+  }
+  .baris input{
+    accent-color:var(--focus);width:15px;height:15px;
+    margin:0;cursor:pointer;flex:none;
+  }
+  .swatch{
+    width:14px;height:14px;flex:none;border-radius:2px;
+    border:1px solid rgba(20,32,28,.35);
+  }
+  .swatch.titik{border-radius:50%}
+  .swatch-titik{
+    width:16px;height:16px;flex:none;
+    display:inline-flex;align-items:center;justify-content:center;
+  }
+  .swatch-titik svg{display:block}
+  .baris-label{flex:1}
+  .hitung{font-size:11.5px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+
+  .basemap-pilih{
+    width:100%;padding:5px 7px;font:inherit;font-size:13px;
+    border:1px solid var(--rule);border-radius:3px;background:var(--paper);
+    color:var(--ink);
+  }
+
+  /* ---------- Legenda indeks ---------- */
+  .legenda{display:flex;gap:0;margin-top:4px}
+  .legenda div{
+    flex:1;height:9px;
+  }
+  .legenda-label{
+    display:flex;justify-content:space-between;
+    font-size:11.5px;color:var(--ink-2);margin-top:3px;
+  }
+
+  /* ---------- Sidebar informasi titik ---------- */
+  #sidebar{
+    position:absolute;top:0;left:0;bottom:0;z-index:1100;
+    width:352px;max-width:86vw;
+    background:var(--paper);
+    border-right:1px solid var(--rule);
+    box-shadow:2px 0 14px rgba(20,32,28,.12);
+    transform:translateX(-100%);
+    transition:transform .26s cubic-bezier(.4,0,.2,1);
+    display:flex;flex-direction:column;
+  }
+  #sidebar.buka{transform:translateX(0)}
+  @media (prefers-reduced-motion:reduce){#sidebar{transition:none}}
+
+  #sidebar-kepala{
+    padding:14px 16px 12px;border-bottom:1px solid var(--rule);
+    display:flex;align-items:flex-start;gap:10px;
+  }
+  #sidebar-kepala .teks{flex:1;min-width:0}
+  #sb-kategori{
+    font-size:12.5px;color:var(--ink-2);margin:0 0 2px;
+    display:flex;align-items:center;gap:6px;
+  }
+  #sb-nama{margin:0;font-size:18px;font-weight:650;letter-spacing:-.01em;line-height:1.25}
+
+  .tombol-ikon{
+    flex:none;width:28px;height:28px;padding:0;
+    border:1px solid var(--rule);border-radius:3px;
+    background:var(--paper);color:var(--ink-2);
+    font-size:17px;line-height:1;cursor:pointer;
+  }
+  .tombol-ikon:hover{background:#f2f5f4;color:var(--ink)}
+  .tombol-ikon:focus-visible,.baris input:focus-visible,
+  .basemap-pilih:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+
+  #sidebar-isi{flex:1;overflow-y:auto;padding:14px 16px 20px}
+
+  .atribut{
+    width:100%;border-collapse:collapse;margin-bottom:16px;
+  }
+  .atribut th,.atribut td{
+    text-align:left;padding:6px 0;font-size:13.5px;
+    border-bottom:1px solid var(--rule);vertical-align:top;
+  }
+  .atribut th{font-weight:500;color:var(--ink-2);width:40%}
+  .atribut td{font-variant-numeric:tabular-nums}
+
+  .media-judul{
+    margin:0 0 7px;font-size:12.5px;font-weight:650;color:var(--ink-2);
+  }
+  #sb-deskripsi{
+    font-size:13.5px;color:var(--ink);line-height:1.55;
+    margin:0 0 16px;
+  }
+  #sb-deskripsi:empty{display:none}
+  #sb-sampel img,#sb-sampel video,
+  #sb-media img,#sb-media video{
+    width:100%;display:block;border-radius:3px;
+    border:1px solid var(--rule);margin-bottom:9px;background:#f2f5f4;
+  }
+  #sb-sampel iframe,
+  #sb-media iframe{
+    width:100%;aspect-ratio:16/9;border:1px solid var(--rule);
+    border-radius:3px;margin-bottom:9px;
+  }
+  .kosong{
+    font-size:13px;color:var(--ink-2);padding:9px 11px;
+    background:#f2f5f4;border-radius:3px;
+  }
+  .tombol-drive{
+    display:inline-flex;align-items:center;gap:6px;
+    font-size:13.5px;font-weight:600;color:var(--focus);
+    text-decoration:none;padding:9px 12px;
+    border:1px solid var(--focus);border-radius:4px;
+    margin-bottom:9px;
+  }
+  .tombol-drive:hover{background:rgba(31,111,92,.08)}
+
+  /* ---------- Tab minimize ---------- */
+  #tab-buka{
+    position:absolute;top:14px;left:14px;z-index:1050;
+    padding:7px 12px;font:inherit;font-size:13.5px;
+    background:var(--panel-bg);border:1px solid var(--rule);
+    border-radius:4px;cursor:pointer;color:var(--ink);
+    box-shadow:0 2px 8px rgba(20,32,28,.12);
+    display:none;
+  }
+  #tab-buka.tampil{display:block}
+
+  .leaflet-container{font-family:inherit}
+  .marker-titik{background:transparent;border:none}
+
+  @media (max-width:640px){
+    #kontrol{width:calc(100% - 28px);max-height:44%}
+  }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<button id="tab-buka" aria-controls="sidebar">Tampilkan informasi titik</button>
+
+<aside id="sidebar" aria-label="Informasi titik survei">
+  <div id="sidebar-kepala">
+    <div class="teks">
+      <p id="sb-kategori"></p>
+      <h2 id="sb-nama">—</h2>
+    </div>
+    <button class="tombol-ikon" id="btn-minimize" title="Sembunyikan panel" aria-label="Sembunyikan panel">&minus;</button>
+  </div>
+  <div id="sidebar-isi">
+    <table class="atribut"><tbody id="sb-atribut"></tbody></table>
+    <p id="sb-deskripsi"></p>
+    <div id="sb-sampel"></div>
+    <div id="sb-media"></div>
+  </div>
+</aside>
+
+<section id="kontrol" aria-label="Kontrol layer">
+  <header>
+    <h1>DAS Tuntang &amp; Babon</h1>
+    <p>Indeks bahaya dan dokumentasi survei drone</p>
+  </header>
+
+  <div class="grup">
+    <h2>Peta dasar</h2>
+    <select class="basemap-pilih" id="pilih-basemap">
+      <option value="osm">OpenStreetMap</option>
+      <option value="topo">Topografi</option>
+      <option value="citra">Citra satelit</option>
+      <option value="polos">Polos (abu-abu)</option>
+    </select>
+  </div>
+
+  <div class="grup">
+    <h2>Layer peta bahaya</h2>
+    <div id="daftar-hazard"></div>
+    <div class="legenda" id="legenda-ramp"></div>
+    <div class="legenda-label"><span>Sangat rendah</span><span>Sangat tinggi</span></div>
+    <p style="font-size:11.5px;color:var(--ink-2);margin:5px 0 0">Gradasi berlaku untuk layer 5 kelas. Genangan pesisir memakai 2 warna kategorikal.</p>
+  </div>
+
+  <div class="grup">
+    <h2>Layer titik survei drone</h2>
+    <div id="daftar-titik"></div>
+  </div>
+</section>
+
+<script>
+/* ==========================================================================
+   BLOK KONFIGURASI
+   Hanya bagian ini yang perlu disesuaikan dengan data Mas Cer.
+   ========================================================================== */
+const CONFIG = {
+
+  /* Tampilan awal peta: [lintang, bujur] dan tingkat zoom */
+  pusat: [-7.05, 110.45],
+  zoom: 10,
+
+  /* Folder tempat file GeoJSON disimpan */
+  folderData: 'data/',
+
+  /* --- Layer poligon indeks bahaya --------------------------------------
+     file   : nama file GeoJSON hasil ekspor (kolom: gridcode, kategori)
+     label  : teks yang muncul di panel kontrol
+     grup   : sub-judul pengelompokan pada panel kontrol
+     kelas  : jumlah kelas gridcode pada layer ini — 5 untuk mayoritas
+              layer (1..5, sangat rendah..tinggi), 2 khusus genangan
+              pesisir (1=tidak berpotensi tergenang, 2=berpotensi tergenang)
+     aktif  : apakah layer tampil saat halaman pertama dibuka              */
+  hazard: [
+    { id:'rx1', file:'peta_indeks_banjir_Rx1day.json', grup:'Banjir (curah hujan ekstrem)',
+      label:'Rx1day', kelas:5, aktif:true },
+    { id:'rx2', file:'peta_indeks_banjir_Rx2day.json', grup:'Banjir (curah hujan ekstrem)',
+      label:'Rx2day', kelas:5, aktif:false },
+    { id:'rx3', file:'peta_indeks_banjir_Rx3day.json', grup:'Banjir (curah hujan ekstrem)',
+      label:'Rx3day', kelas:5, aktif:false },
+    { id:'rx4', file:'peta_indeks_banjir_Rx4day.json', grup:'Banjir (curah hujan ekstrem)',
+      label:'Rx4day', kelas:5, aktif:false },
+    { id:'rx5', file:'peta_indeks_banjir_Rx5day.json', grup:'Banjir (curah hujan ekstrem)',
+      label:'Rx5day', kelas:5, aktif:false },
+
+    { id:'longsor', file:'peta_indeks_longsor.json', grup:'Lainnya',
+      label:'Longsor', kelas:5, aktif:false },
+    { id:'kekeringan', file:'peta_indeks_kekeringan.json', grup:'Lainnya',
+      label:'Kekeringan', kelas:5, aktif:false },
+
+    { id:'pesisir', file:'peta_indeks_genangan_pesisir.json', grup:'Lainnya',
+      label:'Genangan pesisir', kelas:2, aktif:true }
+  ],
+
+  /* --- Layer titik survei drone -----------------------------------------
+     file  : nama file GeoJSON (kolom: lat, lon, lokasi, foto/video-link) */
+  titik: [
+    { id:'infra', file:'titik_infrastruktur.json',
+      label:'Infrastruktur', warna:'#5b3a8e', bentuk:'lingkaran', aktif:true },
+
+    { id:'banjir', file:'titik_banjir.json',
+      label:'Potensi banjir', warna:'#1d7fa8', bentuk:'segitiga', aktif:true },
+
+    { id:'longsor', file:'titik_longsor.json',
+      label:'Potensi longsor', warna:'#b03636', bentuk:'kotak', aktif:true }
+  ],
+
+  /* --- Pemetaan nama field ------------------------------------------------
+     Tulis semua kemungkinan nama kolom; kode memakai yang pertama ketemu. */
+  field: {
+    /* poligon bahaya */
+    gridcode: ['gridcode','Gridcode','GRIDCODE','GridCode'],
+    kategori: ['kategori','Kategori','KATEGORI'],
+    /* titik survei */
+    lat        : ['Latitude','latitude','lat','LAT','Lat'],
+    lon        : ['Longitude','longitude','lon','LON','Lon','lng'],
+    nama       : ['Nama_Titik','NAMA_TITIK','lokasi','LOKASI','Lokasi','nama','NAMA'],
+    desa       : ['Desa_Kel','DESA_KEL'],
+    kecamatan  : ['Kecamatan','KECAMATAN'],
+    kotakab    : ['Kota_Kab','KOTA_KAB'],
+    deskripsi  : ['Desc_Singk','DESC_SINGK','Desc_Singkat','DESC_SINGKAT','deskripsi'],
+    sampelFoto : ['Sample_Dok','SAMPLE_DOK'],
+    folderDok  : ['Folder_Dok','FOLDER_DOK','Foto_Video','foto/video','foto_video','FOTO_VIDEO','media','link','url']
+  },
+
+  /* Gradasi warna gridcode 1..5 (sangat rendah -> tinggi) */
+  rampIndeks: ['#2f9e44','#94c11f','#f2c200','#f08c00','#d43d1a'],
+
+  /* Warna khusus untuk layer 2 kelas (genangan pesisir): [gridcode1, gridcode2] */
+  rampBiner: ['#94c11f','#2f6f9f'],
+
+  /* Tampilkan data contoh bila file GeoJSON belum tersedia */
+  pakaiDataContoh: true
+};
+
+/* ==========================================================================
+   Di bawah baris ini umumnya tidak perlu diubah.
+   ========================================================================== */
+
+const peta = L.map('map',{zoomControl:false}).setView(CONFIG.pusat, CONFIG.zoom);
+L.control.zoom({position:'bottomright'}).addTo(peta);
+L.control.scale({imperial:false,position:'bottomright'}).addTo(peta);
+
+/* ---------- Peta dasar ---------- */
+const basemaps = {
+  osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        {maxZoom:19, attribution:'&copy; Kontributor OpenStreetMap'}),
+  topo: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+        {maxZoom:17, attribution:'&copy; OpenTopoMap, kontributor OpenStreetMap'}),
+  citra: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        {maxZoom:19, attribution:'Citra: Esri, Maxar, Earthstar Geographics'}),
+  polos: L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+        {maxZoom:19, attribution:'&copy; Kontributor OpenStreetMap, &copy; CARTO'})
+};
+let basemapAktif = basemaps.osm.addTo(peta);
+document.getElementById('pilih-basemap').addEventListener('change', e=>{
+  peta.removeLayer(basemapAktif);
+  basemapAktif = basemaps[e.target.value].addTo(peta);
+});
+
+/* ---------- Utilitas ---------- */
+function ambilField(props, kandidat){
+  if(!props) return null;
+  for(const k of kandidat){
+    if(props[k] !== undefined && props[k] !== null && props[k] !== '') return props[k];
+  }
+  return null;
+}
+
+function warnaGridcode(gridcode, kelas){
+  const g = parseInt(gridcode, 10);
+  if(isNaN(g)) return null;
+  if(kelas === 2){
+    /* Genangan pesisir: 1 = tidak berpotensi, 2 = berpotensi tergenang */
+    return CONFIG.rampBiner[Math.min(1, Math.max(0, g-1))];
+  }
+  /* Layer 5 kelas: gridcode 1..5 -> sangat rendah..tinggi */
+  const ramp = CONFIG.rampIndeks;
+  return ramp[Math.min(ramp.length-1, Math.max(0, g-1))];
+}
+
+/* Mengambil ID file dari berbagai format tautan berbagi Google Drive:
+   .../file/d/ID_FILE/view , .../open?id=ID_FILE , .../uc?id=ID_FILE dst. */
+function idDrive(url){
+  const s = String(url);
+  let m = s.match(/\/file\/d\/([\w-]{10,})/);
+  if(m) return m[1];
+  m = s.match(/[?&]id=([\w-]{10,})/);
+  if(m) return m[1];
+  return null;
+}
+
+function jenisMedia(url){
+  const s = String(url).trim();
+  if(/drive\.google\.com\/drive\/folders\//i.test(s)) return 'drive-folder';
+  if(/drive\.google\.com/i.test(s) && idDrive(s)) return 'drive-file';
+  if(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([\w-]{11})/.test(s)) return 'youtube';
+  if(/\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(s)) return 'video';
+  if(/\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i.test(s)) return 'foto';
+  return 'foto'; /* asumsi foto bila ekstensi tidak dikenali */
+}
+
+/* Menghasilkan SVG bentuk (lingkaran/segitiga/kotak) — dipakai untuk ikon
+   marker di peta maupun swatch mini pada panel kontrol. */
+function svgBentuk(bentuk, warna, ukuran){
+  const s = ukuran;
+  let inner;
+  if(bentuk === 'segitiga'){
+    inner = '<polygon points="'+(s*0.5)+',2 '+(s-2)+','+(s-3)+' 2,'+(s-3)+'" ' +
+            'fill="'+warna+'" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/>';
+  } else if(bentuk === 'kotak'){
+    inner = '<rect x="3" y="3" width="'+(s-6)+'" height="'+(s-6)+'" rx="2" ' +
+            'fill="'+warna+'" stroke="#fff" stroke-width="1.6"/>';
+  } else {
+    inner = '<circle cx="'+(s/2)+'" cy="'+(s/2)+'" r="'+(s/2-3)+'" ' +
+            'fill="'+warna+'" stroke="#fff" stroke-width="1.6"/>';
+  }
+  return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 '+s+' '+s+'">'+inner+'</svg>';
+}
+
+function iconTitik(cfg){
+  return L.divIcon({
+    className:'marker-titik',
+    html: svgBentuk(cfg.bentuk, cfg.warna, 22),
+    iconSize:[22,22],
+    iconAnchor:[11,11],
+    tooltipAnchor:[0,-13]
+  });
+}
+
+function tautanMedia(nilai, folder){
+  const s = String(nilai).trim();
+  return /^(https?:)?\/\//i.test(s) ? s : folder + s;
+}
+
+/* ---------- Sidebar ---------- */
+const sidebar   = document.getElementById('sidebar');
+const tabBuka   = document.getElementById('tab-buka');
+const sbKategori= document.getElementById('sb-kategori');
+const sbNama    = document.getElementById('sb-nama');
+const sbAtribut = document.getElementById('sb-atribut');
+const sbDeskripsi = document.getElementById('sb-deskripsi');
+const sbSampel  = document.getElementById('sb-sampel');
+const sbMedia   = document.getElementById('sb-media');
+let adaTitikTerpilih = false;
+
+document.getElementById('btn-minimize').addEventListener('click', ()=>{
+  sidebar.classList.remove('buka');
+  if(adaTitikTerpilih) tabBuka.classList.add('tampil');
+});
+tabBuka.addEventListener('click', ()=>{
+  sidebar.classList.add('buka');
+  tabBuka.classList.remove('tampil');
+});
+document.addEventListener('keydown', e=>{
+  if(e.key === 'Escape' && sidebar.classList.contains('buka')){
+    sidebar.classList.remove('buka');
+    if(adaTitikTerpilih) tabBuka.classList.add('tampil');
+  }
+});
+
+function bukaSidebar(props, latlng, layerInfo){
+  adaTitikTerpilih = true;
+  tabBuka.classList.remove('tampil');
+  sidebar.classList.add('buka');
+
+  sbKategori.innerHTML =
+    '<span class="swatch titik" style="background:'+layerInfo.warna+'"></span>' +
+    layerInfo.label;
+  sbNama.textContent = ambilField(props, CONFIG.field.nama) || 'Titik tanpa nama';
+
+  /* Baris atribut: koordinat + wilayah administratif (bila tersedia) */
+  const desa      = ambilField(props, CONFIG.field.desa);
+  const kecamatan = ambilField(props, CONFIG.field.kecamatan);
+  const kotakab   = ambilField(props, CONFIG.field.kotakab);
+  const baris = [
+    ['Lintang', latlng.lat.toFixed(6) + '&deg;'],
+    ['Bujur',   latlng.lng.toFixed(6) + '&deg;']
+  ];
+  if(desa)      baris.push(['Desa/Kelurahan', desa]);
+  if(kecamatan) baris.push(['Kecamatan', kecamatan]);
+  if(kotakab)   baris.push(['Kota/Kabupaten', kotakab]);
+  sbAtribut.innerHTML = baris
+    .map(b => '<tr><th>'+b[0]+'</th><td>'+b[1]+'</td></tr>').join('');
+
+  /* Deskripsi singkat */
+  const deskripsi = ambilField(props, CONFIG.field.deskripsi);
+  sbDeskripsi.textContent = deskripsi || '';
+
+  /* Foto sampel — satu tautan langsung ke file, ditampilkan inline */
+  const sampel = ambilField(props, CONFIG.field.sampelFoto);
+  if(sampel){
+    const jenis = jenisMedia(sampel);
+    if(jenis === 'youtube'){
+      const yt = String(sampel).match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([\w-]{11})/);
+      sbSampel.innerHTML = '<p class="media-judul">Foto/video sampel</p>' +
+        '<iframe src="https://www.youtube.com/embed/'+yt[1]+'" title="Video sampel" allowfullscreen loading="lazy"></iframe>';
+    } else if(jenis === 'drive-file'){
+      const id = idDrive(sampel);
+      sbSampel.innerHTML = '<p class="media-judul">Foto/video sampel</p>' +
+        '<iframe src="https://drive.google.com/file/d/'+id+'/preview" allow="autoplay" loading="lazy"></iframe>';
+    } else if(jenis === 'video'){
+      sbSampel.innerHTML = '<p class="media-judul">Foto/video sampel</p>' +
+        '<video controls preload="metadata" src="'+sampel+'"></video>';
+    } else if(jenis === 'drive-folder'){
+      /* Sample_Dok seharusnya tautan file langsung; jika ternyata folder, jangan dipaksa embed */
+      sbSampel.innerHTML = '<a class="tombol-drive" href="'+sampel+'" target="_blank" rel="noopener">Buka tautan sampel &rarr;</a>';
+    } else {
+      sbSampel.innerHTML = '<p class="media-judul">Foto sampel</p>' +
+        '<img src="'+sampel+'" alt="Foto sampel titik survei" loading="lazy" ' +
+        'onerror="this.replaceWith(Object.assign(document.createElement(\'div\'),' +
+        '{className:\'kosong\',textContent:\'Foto sampel tidak dapat dimuat — periksa apakah tautan mengarah langsung ke file.\'}))">';
+    }
+  } else {
+    sbSampel.innerHTML = '';
+  }
+
+  /* Folder dokumentasi lengkap (Google Drive) */
+  const folder = ambilField(props, CONFIG.field.folderDok);
+  if(folder && jenisMedia(folder) === 'drive-folder'){
+    sbMedia.innerHTML = '<p class="media-judul">Dokumentasi lengkap</p>' +
+      '<a class="tombol-drive" href="'+folder+'" target="_blank" rel="noopener">Buka folder Google Drive &rarr;</a>';
+  } else if(folder){
+    sbMedia.innerHTML = '<a class="tombol-drive" href="'+folder+'" target="_blank" rel="noopener">Buka dokumentasi &rarr;</a>';
+  } else if(!sampel){
+    sbMedia.innerHTML = '<div class="kosong">Belum ada foto atau video yang tertaut pada titik ini.</div>';
+  } else {
+    sbMedia.innerHTML = '';
+  }
+}
+
+/* ---------- Pemuatan layer ---------- */
+const daftarHazard = document.getElementById('daftar-hazard');
+const daftarTitik  = document.getElementById('daftar-titik');
+const gagal        = [];
+let totalTitik = 0;
+
+let grupTerakhir = null;
+function buatBaris(wadah, cfg, jenis, jumlah){
+  if(cfg.grup && cfg.grup !== grupTerakhir){
+    const sub = document.createElement('p');
+    sub.className = 'subjudul';
+    sub.textContent = cfg.grup;
+    wadah.appendChild(sub);
+    grupTerakhir = cfg.grup;
+  }
+  const label = document.createElement('label');
+  label.className = 'baris';
+  const swatchHTML = cfg.bentuk
+    ? '<span class="swatch-titik">'+svgBentuk(cfg.bentuk, cfg.warna, 16)+'</span>'
+    : '<span class="swatch" style="background:'+(cfg.warna || (cfg.kelas === 2 ? CONFIG.rampBiner[1] : CONFIG.rampIndeks[Math.ceil(CONFIG.rampIndeks.length/2)-1]))+'"></span>';
+  label.innerHTML =
+    '<input type="checkbox" ' + (cfg.aktif ? 'checked' : '') + '>' +
+    swatchHTML +
+    '<span class="baris-label">'+cfg.label+'</span>' +
+    '<span class="hitung">'+jumlah+'</span>';
+  label.querySelector('input').addEventListener('change', e=>{
+    if(e.target.checked) peta.addLayer(cfg._layer);
+    else peta.removeLayer(cfg._layer);
+  });
+  wadah.appendChild(label);
+}
+
+async function muatGeoJSON(path){
+  const res = await fetch(path);
+  if(!res.ok) throw new Error(res.status);
+  return res.json();
+}
+
+/* Jika data titik berupa JSON tabel biasa (array objek dengan kolom
+   lat/lon), bukan FeatureCollection, ubah dulu menjadi GeoJSON di sini. */
+function pastikanGeoJSONTitik(data){
+  if(data && data.type === 'FeatureCollection') return data;
+  const larik = Array.isArray(data) ? data : (data && data.features) || [];
+  return {
+    type:'FeatureCollection',
+    features: larik.map(baris => ({
+      type:'Feature',
+      properties: baris,
+      geometry:{
+        type:'Point',
+        coordinates:[
+          parseFloat(ambilField(baris, CONFIG.field.lon)),
+          parseFloat(ambilField(baris, CONFIG.field.lat))
+        ]
+      }
+    }))
+  };
+}
+
+async function muatHazard(cfg){
+  let data;
+  try{
+    data = await muatGeoJSON(CONFIG.folderData + cfg.file);
+  }catch(e){
+    gagal.push(cfg.file);
+    if(!CONFIG.pakaiDataContoh) return;
+    data = contohPoligon(cfg);
+  }
+
+  cfg._layer = L.geoJSON(data, {
+    style: f => {
+      const g = ambilField(f.properties, CONFIG.field.gridcode);
+      const w = warnaGridcode(g, cfg.kelas);
+      return {
+        color:'#ffffff', weight:.4, opacity:.6,
+        fillColor: w || '#9aa39d',
+        fillOpacity:.62
+      };
+    },
+    onEachFeature: (f, layer) => {
+      const kategori = ambilField(f.properties, CONFIG.field.kategori);
+      layer.bindTooltip(
+        '<b>'+cfg.label+'</b>' + (kategori !== null ? '<br>'+kategori : ''),
+        {sticky:true}
+      );
+    }
+  });
+
+  if(cfg.aktif) cfg._layer.addTo(peta);
+  buatBaris(daftarHazard, cfg, 'hazard', (data.features||[]).length + ' plg');
+}
+
+async function muatTitik(cfg){
+  let data;
+  try{
+    data = await muatGeoJSON(CONFIG.folderData + cfg.file);
+  }catch(e){
+    gagal.push(cfg.file);
+    if(!CONFIG.pakaiDataContoh) return;
+    data = contohTitik(cfg);
+  }
+  data = pastikanGeoJSONTitik(data);
+
+  cfg._layer = L.geoJSON(data, {
+    pointToLayer: (f, latlng) => L.marker(latlng, {
+      icon: iconTitik(cfg), riseOnHover:true
+    }),
+    onEachFeature: (f, layer) => {
+      const nama = ambilField(f.properties, CONFIG.field.nama) || 'Titik survei';
+      layer.bindTooltip(nama, {direction:'top', offset:[0,-8]});
+      layer.on('click', e => {
+        bukaSidebar(f.properties, e.latlng, cfg);
+        peta.panTo(e.latlng);
+      });
+      layer.on('keypress', e => {
+        if(e.originalEvent.key === 'Enter') bukaSidebar(f.properties, layer.getLatLng(), cfg);
+      });
+    }
+  });
+
+  totalTitik += (data.features||[]).length;
+  if(cfg.aktif) cfg._layer.addTo(peta);
+  buatBaris(daftarTitik, cfg, 'titik', (data.features||[]).length + ' titik');
+}
+
+/* ---------- Data contoh (dipakai hanya bila file belum ada) ---------- */
+function contohPoligon(cfg){
+  const acuan = {rx1:[-6.92,110.42], rx2:[-6.95,110.48], rx3:[-6.98,110.54],
+                 rx4:[-7.02,110.40], rx5:[-7.05,110.46],
+                 kekeringan:[-7.18,110.40], longsor:[-7.24,110.52], pesisir:[-6.88,110.44]};
+  const [lat0,lon0] = acuan[cfg.id] || CONFIG.pusat;
+  const jumlahKelas = cfg.kelas || 5;
+  const label2 = ['Tidak berpotensi tergenang','Berpotensi tergenang'];
+  const label5 = ['Sangat rendah','Rendah','Sedang','Tinggi','Sangat tinggi'];
+  const fitur = [];
+  for(let i=0;i<5;i++){
+    const dy = (i%3)*0.045, dx = Math.floor(i/3)*0.055;
+    const lat = lat0+dy, lon = lon0+dx, s = 0.04;
+    const g = (i % jumlahKelas) + 1;
+    fitur.push({type:'Feature',
+      properties:{ gridcode:g, kategori:(jumlahKelas===2?label2[g-1]:label5[g-1]) },
+      geometry:{type:'Polygon',coordinates:[[
+        [lon,lat],[lon+s,lat],[lon+s,lat-s],[lon,lat-s],[lon,lat]
+      ]]}});
+  }
+  return {type:'FeatureCollection',features:fitur};
+}
+
+function contohTitik(cfg){
+  const acuan = {infra:[-6.95,110.44], banjir:[-7.08,110.46], longsor:[-7.22,110.50]};
+  const [lat0,lon0] = acuan[cfg.id] || CONFIG.pusat;
+  const fitur = [];
+  for(let i=1;i<=6;i++){
+    const lat = lat0 - Math.floor(i/3)*0.03, lon = lon0 + (i%3)*0.035;
+    fitur.push({type:'Feature',
+      properties:{
+        lat: lat, lon: lon,
+        lokasi: cfg.label + ' ' + String(i).padStart(2,'0'),
+        'foto/video': ''
+      },
+      geometry:{type:'Point', coordinates:[lon, lat]}});
+  }
+  return {type:'FeatureCollection',features:fitur};
+}
+
+/* ---------- Legenda gradasi ---------- */
+document.getElementById('legenda-ramp').innerHTML =
+  CONFIG.rampIndeks.map(c=>'<div style="background:'+c+'"></div>').join('');
+
+/* ---------- Jalankan ---------- */
+(async function(){
+  for(const h of CONFIG.hazard) await muatHazard(h);
+  grupTerakhir = null;
+  for(const t of CONFIG.titik)  await muatTitik(t);
+})();
+</script>
+</body>
+</html>
